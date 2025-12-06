@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Screen Share — Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    video { width: 90%; max-width: 1100px; border: 1px solid #ccc; background: #000; }
+  </style>
+</head>
+<body>
+  <h1>Viewer</h1>
+  <p id="status">Connecting...</p>
+  <video id="remote" autoplay playsinline controls></video>
+
+  <script>
+    function qs(name) {
+      const params = new URLSearchParams(location.search);
+      return params.get(name);
+    }
+    const room = qs('room');
+    if (!room) {
+      document.getElementById('status').innerText = 'No room specified in URL.';
+      throw new Error('No room');
+    }
+
+    const pc = new RTCPeerConnection();
+    const remote = document.getElementById('remote');
+
+    pc.ontrack = (evt) => {
+      // for screen share, usually one stream
+      remote.srcObject = evt.streams[0];
+      document.getElementById('status').innerText = 'Connected.';
+    };
+
+    (async () => {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const resp = await fetch(`/view/${room}/offer`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({sdp: offer.sdp, type: offer.type})
+      });
+      if (!resp.ok) {
+        document.getElementById('status').innerText = 'Room not found or error.';
+        return;
+      }
+      const data = await resp.json();
+      const answer = { sdp: data.sdp, type: data.type };
+      await pc.setRemoteDescription(answer);
+    })();
+  </script>
+</body>
+</html>
