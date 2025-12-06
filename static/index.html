@@ -1,87 +1,36 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Screen Share — Broadcaster</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 32px; }
-    video { width: 80%; max-width: 900px; border: 1px solid #ccc; }
-    #link { margin-top: 12px; background:#f7f7f7;padding:8px;border-radius:6px;display:inline-block;}
-  </style>
+    <title>Screen Share (Broadcaster)</title>
 </head>
 <body>
-  <h1>Share your screen</h1>
-  <p>Click the button, choose a screen/window/tab to share. When sharing starts, a room link will be generated for viewers.</p>
-  <button id="share">Share screen</button>
-  <button id="stop" disabled>Stop sharing</button>
-  <div id="link"></div>
-  <div>
-    <h3>Local preview</h3>
-    <video id="local" autoplay playsinline muted></video>
-  </div>
+    <h1>Share Your Screen</h1>
+    <button id="shareBtn">Start Sharing</button>
+    <p id="info"></p>
 
-  <script>
-    let pc;
-    let stream;
-    const btn = document.getElementById('share');
-    const stopBtn = document.getElementById('stop');
-    const local = document.getElementById('local');
-    const linkDiv = document.getElementById('link');
+    <script>
+        const btn = document.getElementById("shareBtn");
+        const info = document.getElementById("info");
 
-    btn.onclick = async () => {
-      try {
-        stream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
-      } catch (e) {
-        alert('Screen share permission denied or not available: ' + e);
-        return;
-      }
-      local.srcObject = stream;
+        btn.onclick = async () => {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            info.innerText = "Creating room…";
 
-      pc = new RTCPeerConnection();
+            const pc = new RTCPeerConnection();
 
-      // add tracks
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      // create offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
 
-      // send offer to server which will create a room and answer
-      const resp = await fetch('/offer', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({sdp: offer.sdp, type: offer.type})
-      });
-      const data = await resp.json();
-      const answer = { sdp: data.sdp, type: data.type };
-      await pc.setRemoteDescription(answer);
+            const resp = await fetch("/create_room", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ offer })
+            });
+            const data = await resp.json();
+            const room = data.room;
 
-      const room = data.room;
-      const url = `${location.origin}/viewer.html?room=${room}`;
-      linkDiv.innerHTML = `Share this URL with viewers:<div id="sharelink"><a href="${url}" target="_blank">${url}</a></div>`;
-      stopBtn.disabled = false;
-      btn.disabled = true;
-
-      // If the user stops sharing in browser UI, we stop and cleanup
-      stream.getVideoTracks()[0].onended = () => {
-        stopSharing();
-      };
-    };
-
-    stopBtn.onclick = stopSharing;
-
-    async function stopSharing() {
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
-      if (pc) {
-        pc.close();
-      }
-      linkDiv.innerHTML = '';
-      local.srcObject = null;
-      stopBtn.disabled = true;
-      btn.disabled = false;
-    }
-  </script>
-</body>
-</html>
+            info.innerHTML = `
+                Room created.<br>
+                Share this link:<
